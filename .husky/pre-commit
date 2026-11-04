@@ -1,0 +1,47 @@
+# Formatting before checking
+yarn format ||
+(
+    echo '🧹 Oops! Failed to format.
+            Prettier Format Failed. Run "yarn format" manually.';
+    false;
+)
+
+echo '👷 Preparing your code before committing...'
+
+# Check Prettier standards
+yarn check-format ||
+(
+    echo '🧹 Oops! Your code does not meet the styling standards.
+            Prettier Check Failed. Run "yarn format", add the changes, and try to commit again.';
+    false;
+)
+
+# Check ESLint standards
+yarn check-lint ||
+(
+    echo '🚨 Oops! Your code does not meet the ESLint standards.
+            ESLint Check Failed. Make the required changes mentioned above, add the changes, and try to commit again.'
+    false; 
+)
+
+# Check tsconfig standards
+yarn check-types ||
+(
+    echo '🔍 Oops! Your code failed the type check.
+            Make the necessary changes as mentioned above.'
+    false;
+)
+
+# # If everything passes... Now we can build
+# echo '🔨 Building your code...'
+
+# yarn build ||
+# (
+#     echo '❌ Uh-oh! Your build failed.
+#             There were errors during the build. Please check the error messages above to see what went wrong. 
+#     '
+#     false;
+# )
+
+# If everything passes... Now we can commit
+echo '✅ Congrats! Your code looks great. Committing it now. ✅'
