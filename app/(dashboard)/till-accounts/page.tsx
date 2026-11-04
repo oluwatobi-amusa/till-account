@@ -32,7 +32,6 @@ import {
   type TillUser
 } from './model';
 
-type ViewTab = 'accounts' | 'transactions' | 'shifts' | 'sweeps';
 type Filters = {
   search: string;
   tillId: string;
@@ -66,39 +65,6 @@ const formatDateTime = (value: string | null) =>
         timeStyle: 'short'
       }).format(new Date(value))
     : '—';
-
-const getLagosDate = (value: string) => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(new Date(value));
-  const dateParts = Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
-  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
-};
-
-const formatShiftDuration = (startAt: string, endAt: string | null) => {
-  const start = new Date(startAt);
-  const end = new Date(endAt ?? startAt);
-  const date = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Africa/Lagos',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  }).format(start);
-  const formatTime = (value: Date) =>
-    new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Africa/Lagos',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
-      .format(value)
-      .replace(/\s/g, '')
-      .toLowerCase();
-  return `${date}, ${formatTime(start)} - ${formatTime(end)}`;
-};
 
 const normalize = (value: string) => value.trim().toLowerCase();
 const inputClass =
@@ -297,8 +263,6 @@ export default function TillAccountsPage() {
   const stateRef = useRef(state);
   const isLoadedRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [tab, setTab] = useState<ViewTab>('accounts');
-  const [transactionShiftId, setTransactionShiftId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [isCreateTillOpen, setIsCreateTillOpen] = useState(false);
   const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
@@ -400,51 +364,6 @@ export default function TillAccountsPage() {
         );
       }),
     [filters, state.accounts]
-  );
-
-  const matchesRecord = useCallback(
-    (record: {
-      tillId: string;
-      userId: string;
-      createdAt?: string;
-      startAt?: string;
-      endAt?: string | null;
-      reference: string;
-    }) => {
-      const account = getAccount(state, record.tillId);
-      const user = getUser(state, record.userId);
-      const searchValue =
-        `${record.reference} ${account?.name ?? ''} ${account?.number ?? ''} ${user?.name ?? ''}`.toLowerCase();
-      const dateValue = record.createdAt ?? record.startAt ?? record.endAt;
-      const date = dateValue ? getLagosDate(dateValue) : '';
-      return (
-        (!filters.search || searchValue.includes(normalize(filters.search))) &&
-        (filters.tillId === 'all' || record.tillId === filters.tillId) &&
-        (filters.userId === 'all' || record.userId === filters.userId) &&
-        (!filters.from || date >= filters.from) &&
-        (!filters.to || date <= filters.to)
-      );
-    },
-    [filters, state]
-  );
-  const filteredTransactions = state.transactions.filter((transaction) =>
-    matchesRecord(transaction)
-  );
-  const filteredStatusTransactions = filteredTransactions.filter(
-    (transaction) =>
-      (!transactionShiftId || transaction.shiftId === transactionShiftId) &&
-      (filters.type === 'all' || transaction.status === filters.type)
-  );
-  const filteredShifts = state.shifts.filter(
-    (shift) =>
-      matchesRecord(shift) &&
-      (filters.type === 'all' ||
-        shift.closureType === filters.type ||
-        (filters.type === 'Active' && shift.status === 'Active'))
-  );
-  const filteredSweeps = state.sweeps.filter(
-    (sweep) =>
-      matchesRecord(sweep) && (filters.type === 'all' || sweep.closureType === filters.type)
   );
 
   const handleCreateTill = (event: FormEvent<HTMLFormElement>) => {
@@ -717,258 +636,6 @@ export default function TillAccountsPage() {
     </section>
   );
 
-  const renderTransactions = () => (
-    <section className="overflow-hidden rounded-[10px] border-b-4 border-[#E5E7E9] bg-white">
-      <div className="border-b border-[#EBEBEB] px-5 py-4">
-        <h2 className="text-sm font-bold text-black">
-          Transaction history ({filteredTransactions.length})
-        </h2>
-        <p className="mt-1 text-xs text-[#A4A4A4]">
-          Transactions are attributed to the active till user when received.
-        </p>
-      </div>
-      {renderFilters('status')}
-      {filteredStatusTransactions.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1300px] whitespace-nowrap text-left text-sm">
-            <thead className="bg-[#F7F7F7] text-xs font-bold text-black">
-              <tr>
-                <th className="px-5 py-4">Reference</th>
-                <th className="px-5 py-4">Date and time</th>
-                <th className="px-5 py-4">Amount</th>
-                <th className="px-5 py-4">Till account</th>
-                <th className="px-5 py-4">Active user</th>
-                <th className="px-5 py-4">Sender name</th>
-                <th className="px-5 py-4">Description</th>
-                <th className="px-5 py-4">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStatusTransactions.map((transaction) => (
-                <tr className="border-t border-[#EBEBEB]" key={transaction.id}>
-                  <td className="px-5 py-4 font-semibold">
-                    <TableText value={transaction.reference} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <TableText value={formatDateTime(transaction.createdAt)} />
-                  </td>
-                  <td className="px-5 py-4 font-semibold [font-variant-numeric:tabular-nums]">
-                    <TableText value={formatCurrency(transaction.amount)} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <TableText value={getAccount(state, transaction.tillId)?.name ?? ''} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <TableText value={getUserName(state, transaction.userId)} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <TableText value={transaction.senderName ?? 'Unknown sender'} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <TableText value={transaction.description ?? 'Till payment'} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <StatusPill
-                      tone={
-                        transaction.status === 'Successful'
-                          ? 'green'
-                          : transaction.status === 'Pending'
-                            ? 'amber'
-                            : 'neutral'
-                      }
-                    >
-                      {transaction.status}
-                    </StatusPill>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState message="No transactions found" />
-      )}
-    </section>
-  );
-
-  const renderShifts = () => (
-    <section className="overflow-hidden rounded-[10px] border-b-4 border-[#E5E7E9] bg-white">
-      <div className="border-b border-[#EBEBEB] px-5 py-4">
-        <h2 className="text-sm font-bold text-black">Shift history ({filteredShifts.length})</h2>
-        <p className="mt-1 text-xs text-[#A4A4A4]">
-          Inspect active and completed collection periods.
-        </p>
-      </div>
-      {renderFilters('closure')}
-      {filteredShifts.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px] whitespace-nowrap text-left text-sm">
-            <thead className="bg-[#F7F7F7] text-xs font-bold text-black">
-              <tr>
-                <th className="px-5 py-4">Shift reference</th>
-                <th className="px-5 py-4">Till / user</th>
-                <th className="px-5 py-4">Start / end</th>
-                <th className="px-5 py-4">Opening balance</th>
-                <th className="px-5 py-4">Closing balance</th>
-                <th className="px-5 py-4">Collections</th>
-                <th className="px-5 py-4">Swept</th>
-                <th className="px-5 py-4">Closure / status</th>
-                <th className="px-5 py-4">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredShifts.map((shift) => (
-                <tr className="border-t border-[#EBEBEB]" key={shift.id}>
-                  <td className="px-5 py-4 font-semibold">
-                    <TableText value={shift.reference} />
-                  </td>
-                  <td className="px-5 py-4">
-                    <TableText
-                      value={`${getAccount(state, shift.tillId)?.name ?? ''} · ${getUserName(state, shift.userId)}`}
-                    />
-                  </td>
-                  <td className="px-5 py-4">
-                    <TableText value={formatShiftDuration(shift.startAt, shift.endAt)} />
-                  </td>
-                  <td className="px-5 py-4 [font-variant-numeric:tabular-nums]">
-                    <TableText value={formatCurrency(shift.openingBalance)} />
-                  </td>
-                  <td className="px-5 py-4 [font-variant-numeric:tabular-nums]">
-                    <TableText
-                      value={
-                        shift.closingBalance === null ? '—' : formatCurrency(shift.closingBalance)
-                      }
-                    />
-                  </td>
-                  <td className="px-5 py-4 [font-variant-numeric:tabular-nums]">
-                    <TableText value={formatCurrency(shift.totalCollections)} />
-                  </td>
-                  <td className="px-5 py-4 [font-variant-numeric:tabular-nums]">
-                    <TableText
-                      value={shift.amountSwept === null ? '—' : formatCurrency(shift.amountSwept)}
-                    />
-                  </td>
-                  <td className="px-5 py-4">
-                    <div
-                      className="flex items-center gap-2"
-                      title={`${shift.closureType ?? '—'} · ${shift.status}`}
-                      tabIndex={0}
-                    >
-                      <span>{shift.closureType ?? '—'}</span>
-                      <StatusPill tone={shift.status === 'Active' ? 'amber' : 'green'}>
-                        {shift.status}
-                      </StatusPill>
-                    </div>
-                  </td>
-                  <td className="sticky right-0 z-10 bg-white px-5 py-4">
-                    <button
-                      className="whitespace-nowrap font-semibold text-[#009148] underline"
-                      title="View transactions for this shift"
-                      onClick={() => {
-                        setTransactionShiftId(shift.id);
-                        setTab('transactions');
-                        setFilters({
-                          ...EMPTY_FILTERS,
-                          tillId: shift.tillId,
-                          userId: shift.userId
-                        });
-                      }}
-                    >
-                      Transactions
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState message="No shifts found" />
-      )}
-    </section>
-  );
-
-  const renderSweeps = () => (
-    <section className="overflow-hidden rounded-[10px] border-b-4 border-[#E5E7E9] bg-white">
-      <div className="border-b border-[#EBEBEB] px-5 py-4">
-        <h2 className="text-sm font-bold text-black">Sweep history ({filteredSweeps.length})</h2>
-        <p className="mt-1 text-xs text-[#A4A4A4]">
-          A permanent record of manual and automatic shift closures.
-        </p>
-      </div>
-      {renderFilters('closure')}
-      {filteredSweeps.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1300px] whitespace-nowrap text-left text-sm">
-            <thead className="bg-[#F7F7F7] text-xs font-bold text-black">
-              <tr>
-                <th className="px-5 py-4">Sweep reference</th>
-                <th className="px-5 py-4">Till account</th>
-                <th className="px-5 py-4">User name</th>
-                <th className="px-5 py-4">Amount before shift</th>
-                <th className="px-5 py-4">Balance before sweep</th>
-                <th className="px-5 py-4">Collection during shift</th>
-                <th className="px-5 py-4">Sweep timestamp</th>
-                <th className="px-5 py-4">Sweep type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSweeps.map((sweep) => {
-                const shift = state.shifts.find((item) => item.id === sweep.shiftId);
-                return (
-                  <tr className="border-t border-[#EBEBEB]" key={sweep.id}>
-                    <td className="px-5 py-4">
-                      <TableText value={sweep.reference} />
-                    </td>
-                    <td className="px-5 py-4">
-                      <TableText
-                        value={`${getAccount(state, sweep.tillId)?.name ?? ''} · ${getAccount(state, sweep.tillId)?.number ?? ''}`}
-                      />
-                    </td>
-                    <td className="px-5 py-4">
-                      <TableText value={getUserName(state, sweep.userId)} />
-                    </td>
-                    <td className="px-5 py-4">
-                      <TableText
-                        value={formatCurrency(sweep.openingBalance ?? shift?.openingBalance ?? 0)}
-                      />
-                    </td>
-                    <td className="px-5 py-4">
-                      <TableText value={formatCurrency(sweep.closingBalance ?? sweep.amount)} />
-                    </td>
-                    <td className="px-5 py-4">
-                      <TableText
-                        value={formatCurrency(
-                          sweep.totalCollections ?? shift?.totalCollections ?? 0
-                        )}
-                      />
-                    </td>
-                    <td className="px-5 py-4">
-                      <TableText
-                        value={
-                          shift
-                            ? formatShiftDuration(shift.startAt, shift.endAt ?? sweep.createdAt)
-                            : formatDateTime(sweep.createdAt)
-                        }
-                      />
-                    </td>
-                    <td className="px-5 py-4">
-                      <StatusPill tone={sweep.closureType === 'Automatic' ? 'amber' : 'green'}>
-                        {sweep.closureType === 'Automatic' ? 'End of day auto sweep' : 'Manual'}
-                      </StatusPill>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyState message="No sweep records found" />
-      )}
-    </section>
-  );
-
   const activeUsers = activationTillId ? assignedUsers(activationTillId) : [];
   const shiftToClose = closingTillId
     ? state.shifts.find((shift) => shift.tillId === closingTillId && shift.status === 'Active')
@@ -1014,42 +681,7 @@ export default function TillAccountsPage() {
         Any shift left open at 11:59 PM Africa/Lagos is automatically closed and swept.
       </p>
 
-      <nav
-        aria-label="Till management views"
-        className="flex gap-2 overflow-x-auto border-b border-[#EBEBEB]"
-      >
-        {(
-          [
-            ['accounts', 'Till accounts'],
-            ['transactions', 'Transactions'],
-            ['shifts', 'Shift history'],
-            ['sweeps', 'Sweep history']
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            aria-current={tab === id ? 'page' : undefined}
-            onClick={() => {
-              setTab(id);
-              setTransactionShiftId(null);
-              setFilters(EMPTY_FILTERS);
-            }}
-            className={`min-h-11 shrink-0 border-b-2 px-4 text-sm font-semibold ${
-              tab === id
-                ? 'border-[#009148] text-[#009148]'
-                : 'border-transparent text-[#A4A4A4] hover:text-black'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      {tab === 'accounts' && renderAccounts()}
-      {tab === 'transactions' && renderTransactions()}
-      {tab === 'shifts' && renderShifts()}
-      {tab === 'sweeps' && renderSweeps()}
+      {renderAccounts()}
 
       <Dialog open={isCreateTillOpen} onOpenChange={setIsCreateTillOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto rounded-[12px] sm:max-w-lg">

@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Starter Pack',
-  description: 'Starter Pack for a project',
+  title: {
+    default: 'Till Account Management',
+    template: '%s | Till Account Management'
+  },
+  description: 'Manage till accounts, users, shifts, transactions, and sweeps.',
   icons: {
     icon: '/favicon.png'
   }
